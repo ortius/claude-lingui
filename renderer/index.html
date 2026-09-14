@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self';" />
+  <title>Claude LinGUI</title>
+  <link rel="stylesheet" href="vendor/hljs-light.css" id="hljsLight" />
+  <link rel="stylesheet" href="vendor/hljs-dark.css" id="hljsDark" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app" class="app">
+
+    <!-- ============================= SIDEBAR ============================= -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="brand">
+          <img class="brand-mark" src="vendor/app-icon.png" alt="" aria-hidden="true" />
+          <span class="brand-name">Claude LinGUI</span>
+        </div>
+        <button class="icon-btn" id="collapseSidebarBtn" title="Collapse sidebar" aria-label="Collapse sidebar">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path d="M15 4l-8 8 8 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+
+      <button class="new-chat-btn" id="newChatBtn">
+        <svg viewBox="0 0 24 24" width="16" height="16"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        New chat
+      </button>
+
+      <div class="sidebar-search">
+        <svg viewBox="0 0 24 24" width="14" height="14"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M21 21l-4.3-4.3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <input type="text" id="chatSearchInput" placeholder="Search chats…" autocomplete="off" />
+      </div>
+
+      <div class="chat-list" id="chatList"><!-- section labels + items populated by app.js --></div>
+
+      <div class="sidebar-footer">
+        <button class="sidebar-footer-btn" id="cliStatusBtn">
+          <span class="status-dot" id="cliStatusDot"></span>
+          <span id="cliStatusText">Checking Claude CLI…</span>
+        </button>
+        <button class="sidebar-footer-btn" id="accountBtn">
+          <span class="status-dot" id="accountStatusDot"></span>
+          <span id="accountStatusText">Account</span>
+        </button>
+        <button class="sidebar-footer-btn" id="toolsBtn">
+          <svg viewBox="0 0 24 24" width="14" height="14"><path d="M14.7 6.3a4 4 0 0 1-5.4 5.4L4 17l1 1 5.3-5.3a4 4 0 0 1 5.4-5.4l-2 2 1 1 2-2z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+          <span>Tools</span>
+        </button>
+        <button class="sidebar-footer-btn" id="themeToggleBtn" title="Toggle theme">
+          <svg viewBox="0 0 24 24" width="16" height="16"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+          <span id="themeToggleText">Theme</span>
+        </button>
+      </div>
+    </aside>
+
+    <button class="icon-btn sidebar-expand-btn" id="expandSidebarBtn" title="Show sidebar" aria-label="Show sidebar" hidden>
+      <svg viewBox="0 0 24 24" width="18" height="18"><path d="M9 4l8 8-8 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+
+    <!-- ============================== MAIN =============================== -->
+    <main class="main">
+
+      <!-- ---- Empty state: no chat open yet ---- -->
+      <section class="welcome" id="welcomeScreen">
+        <div class="welcome-inner">
+          <img class="brand-mark brand-mark-lg" src="vendor/app-icon.png" alt="" aria-hidden="true" />
+          <h1>Claude LinGUI</h1>
+          <p class="welcome-sub">A graphical front end for Claude Code. Pick a working directory, choose a model, and start talking.</p>
+
+          <div class="welcome-config">
+            <div class="mode-tabs" id="welcomeModeTabs" role="tablist">
+              <button type="button" class="mode-tab active" data-mode="folder">Open folder</button>
+              <button type="button" class="mode-tab" data-mode="new">New project</button>
+              <button type="button" class="mode-tab" data-mode="cloud">Cloud session</button>
+            </div>
+
+            <label class="field" id="modePane-folder">
+              <span class="field-label">Working directory</span>
+              <button type="button" class="dir-picker" id="welcomeDirBtn">
+                <svg viewBox="0 0 24 24" width="16" height="16"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+                <span id="welcomeDirLabel">Choose a folder…</span>
+              </button>
+            </label>
+
+            <div id="modePane-new" hidden>
+              <div class="field-row">
+                <label class="field" style="flex:1.3">
+                  <span class="field-label">Project name</span>
+                  <input type="text" class="text-input" id="newProjectName" placeholder="my-new-project" autocomplete="off" />
+                </label>
+                <label class="field">
+                  <span class="field-label">Location</span>
+                  <button type="button" class="dir-picker" id="newProjectLocationBtn">
+                    <svg viewBox="0 0 24 24" width="16" height="16"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+                    <span id="newProjectLocationLabel">Choose…</span>
+                  </button>
+                </label>
+              </div>
+              <div class="path-preview" id="newProjectPreview"></div>
+            </div>
+
+            <div id="modePane-cloud" hidden>
+              <label class="field">
+                <span class="field-label">Cloud session ID or claude.ai/code URL</span>
+                <input type="text" class="text-input" id="cloudSessionInput" placeholder="session_… or https://claude.ai/code/session_…" autocomplete="off" />
+              </label>
+              <p class="field-hint">Sends messages to a cloud session that already exists — replies show up on claude.ai/code or the mobile app, not here (the CLI only lets this window queue messages, not watch the conversation). To start a new session, run <code>claude --cloud "description"</code> in a terminal, or create one from claude.ai/code — then paste its ID or URL here.</p>
+            </div>
+
+            <div class="field-row">
+              <label class="field">
+                <span class="field-label">Model</span>
+                <select id="welcomeModelSelect" class="select"></select>
+              </label>
+              <label class="field" id="modePane-permissions">
+                <span class="field-label">Permissions</span>
+                <select id="welcomePermSelect" class="select"></select>
+              </label>
+            </div>
+          </div>
+
+          <div class="attachment-strip" id="welcomeAttachStrip" hidden></div>
+          <div class="composer-anchor">
+            <div class="suggest-list" id="welcomeSuggestList" hidden></div>
+            <form class="welcome-input" id="welcomeForm">
+              <button type="button" class="icon-btn attach-btn" id="welcomeAttachBtn" title="Attach files" aria-label="Attach files">
+                <svg viewBox="0 0 24 24" width="17" height="17"><path d="M21 11.5V17a4 4 0 0 1-4 4H8.5A5.5 5.5 0 0 1 3 15.5v-8A4.5 4.5 0 0 1 7.5 3a4.5 4.5 0 0 1 4.5 4.5V16a2.5 2.5 0 0 1-5 0V8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+              <input type="file" id="welcomeFileInput" multiple hidden accept="image/*,application/pdf,.txt,.md,.json,.csv,.py,.js,.ts,.tsx,.jsx,.log,.yaml,.yml,.html,.css,.sh" />
+              <textarea id="welcomeTextarea" rows="1" placeholder="Ask Claude to do something… (@ to mention a file, / for commands)"></textarea>
+              <button type="submit" class="send-btn" id="welcomeSendBtn" title="Send" aria-label="Send">
+                <svg viewBox="0 0 24 24" width="18" height="18"><path d="M12 19V5M5 12l7-7 7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+            </form>
+          </div>
+
+          <div class="example-prompts" id="examplePrompts">
+            <button class="example-chip" data-prompt="Summarize the files in this directory and suggest an architecture overview.">Summarize this project</button>
+            <button class="example-chip" data-prompt="List the largest TODO or FIXME items in this codebase.">Find open TODOs</button>
+            <button class="example-chip" data-prompt="Write a README.md for this project based on its contents.">Draft a README</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---- Active chat view ---- -->
+      <section class="chat-view" id="chatView" hidden>
+        <header class="chat-topbar">
+          <div class="chat-topbar-main">
+            <h2 class="chat-title" id="chatTitle" tabindex="0" contenteditable="false"></h2>
+            <div class="chat-meta">
+              <button class="meta-chip" id="chatDirChip" title="Change working directory"></button>
+              <span class="meta-chip meta-chip-static" id="chatModelChip"></span>
+              <span class="meta-chip meta-chip-static" id="chatPermChip"></span>
+            </div>
+          </div>
+          <div class="chat-topbar-actions">
+            <button class="icon-btn" id="pinChatBtn" title="Pin chat" aria-label="Pin chat">
+              <svg viewBox="0 0 24 24" width="16" height="16"><path d="M14.5 3l6.5 6.5-3 3 -1 5-2-2-5 5-1-1 5-5-2-2 5-1 3-3z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+            </button>
+            <button class="icon-btn" id="claudeMdBtn" title="Edit this project's CLAUDE.md" aria-label="Edit CLAUDE.md">
+              <svg viewBox="0 0 24 24" width="16" height="16"><path d="M5 4h9l5 5v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M14 4v5h5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+            </button>
+            <button class="icon-btn" id="exportChatBtn" title="Export chat as Markdown" aria-label="Export chat">
+              <svg viewBox="0 0 24 24" width="16" height="16"><path d="M12 3v12M7 10l5 5 5-5M5 21h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <button class="icon-btn" id="newWindowBtn" title="Open a new window" aria-label="Open a new window">
+              <svg viewBox="0 0 24 24" width="16" height="16"><rect x="4" y="5" width="13" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M9 19h10a1.5 1.5 0 0 0 1.5-1.5V9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+          <div class="chat-topbar-status" id="chatStatus"></div>
+        </header>
+
+        <div class="find-bar" id="findBar" hidden>
+          <svg viewBox="0 0 24 24" width="14" height="14"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M21 21l-4.3-4.3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          <input type="text" id="findInput" placeholder="Find in chat…" autocomplete="off" />
+          <span class="find-status" id="findStatus"></span>
+          <button type="button" class="icon-btn" id="findPrevBtn" title="Previous match" aria-label="Previous match">
+            <svg viewBox="0 0 24 24" width="14" height="14"><path d="M18 15l-6-6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <button type="button" class="icon-btn" id="findNextBtn" title="Next match" aria-label="Next match">
+            <svg viewBox="0 0 24 24" width="14" height="14"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <button type="button" class="icon-btn" id="findCloseBtn" title="Close" aria-label="Close find bar">
+            <svg viewBox="0 0 24 24" width="14" height="14"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+
+        <div class="messages-wrap">
+          <div class="messages" id="messages"></div>
+          <button type="button" class="jump-bottom-btn" id="jumpBottomBtn" hidden aria-label="Jump to latest">
+            <svg viewBox="0 0 24 24" width="16" height="16"><path d="M12 5v14M5 12l7 7 7-7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+
+        <p class="cloud-notice" id="cloudNotice" hidden>☁ This sends messages to a cloud session — replies appear on claude.ai/code or the mobile app, not in this window.</p>
+
+        <div class="attachment-strip" id="composerAttachStrip" hidden></div>
+        <div class="composer-anchor">
+        <div class="suggest-list" id="composerSuggestList" hidden></div>
+        <form class="composer" id="composerForm">
+          <textarea id="composerTextarea" rows="1" placeholder="Message Claude… (Enter to send, Shift+Enter for a new line, @ to mention a file, / for commands)"></textarea>
+          <div class="composer-actions">
+            <button type="button" class="icon-btn attach-btn" id="composerAttachBtn" title="Attach files" aria-label="Attach files">
+              <svg viewBox="0 0 24 24" width="17" height="17"><path d="M21 11.5V17a4 4 0 0 1-4 4H8.5A5.5 5.5 0 0 1 3 15.5v-8A4.5 4.5 0 0 1 7.5 3a4.5 4.5 0 0 1 4.5 4.5V16a2.5 2.5 0 0 1-5 0V8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <input type="file" id="composerFileInput" multiple hidden accept="image/*,application/pdf,.txt,.md,.json,.csv,.py,.js,.ts,.tsx,.jsx,.log,.yaml,.yml,.html,.css,.sh" />
+            <button type="button" class="stop-btn" id="stopBtn" hidden>
+              <svg viewBox="0 0 24 24" width="14" height="14"><rect x="5" y="5" width="14" height="14" rx="2" fill="currentColor"/></svg>
+              Stop
+            </button>
+            <button type="submit" class="send-btn" id="composerSendBtn" title="Send" aria-label="Send">
+              <svg viewBox="0 0 24 24" width="18" height="18"><path d="M12 19V5M5 12l7-7 7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
+        </form>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- ============================ ACCOUNT MODAL ============================ -->
+  <div class="modal-overlay" id="authModalOverlay" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="authModalTitle">
+      <div class="modal-header">
+        <h2 id="authModalTitle">Claude account</h2>
+        <button type="button" class="icon-btn" id="authModalCloseBtn" aria-label="Close">
+          <svg viewBox="0 0 24 24" width="16" height="16"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <p class="field-hint" id="authPane-loading">Checking sign-in status…</p>
+
+        <!-- Signed in -->
+        <div id="authPane-signedin" hidden>
+          <div class="auth-account">
+            <span class="status-dot ok"></span>
+            <div>
+              <div class="auth-email" id="authEmail"></div>
+              <div class="auth-sub" id="authSub"></div>
+            </div>
+          </div>
+          <button type="button" class="stop-btn" id="authLogoutBtn">Log out</button>
+        </div>
+
+        <!-- Signed out -->
+        <div id="authPane-signedout" hidden>
+          <p class="field-hint">Sign in with your Claude account so this app can use your subscription — no <code>ANTHROPIC_API_KEY</code> needed.</p>
+          <p class="field-hint banner-error" id="authSignedOutError" hidden></p>
+          <button type="button" class="new-chat-btn auth-modal-btn" id="authLoginClaudeBtn">Log in with Claude account</button>
+          <button type="button" class="sidebar-footer-btn auth-modal-link" id="authLoginConsoleBtn">Use Anthropic Console instead</button>
+        </div>
+
+        <!-- Login in progress -->
+        <div id="authPane-login" hidden>
+          <p class="field-hint">A sign-in page opened in your browser. Approve access there, then paste the code it shows back here.</p>
+          <button type="button" class="dir-picker auth-modal-btn" id="authOpenLinkBtn" hidden>Open sign-in page ↗</button>
+          <pre class="auth-log" id="authLog"></pre>
+          <form class="field-row" id="authCodeForm">
+            <input type="text" class="text-input" id="authCodeInput" placeholder="Paste code here" autocomplete="off" />
+            <button type="submit" class="new-chat-btn auth-modal-btn" id="authSubmitCodeBtn">Submit</button>
+          </form>
+          <button type="button" class="stop-btn" id="authCancelLoginBtn">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ TOOLS MODAL ============================ -->
+  <div class="modal-overlay" id="toolsModalOverlay" hidden>
+    <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="toolsModalTitle">
+      <div class="modal-header">
+        <h2 id="toolsModalTitle">Tools</h2>
+        <button type="button" class="icon-btn" id="toolsModalCloseBtn" aria-label="Close">
+          <svg viewBox="0 0 24 24" width="16" height="16"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <div class="modal-tabs" id="toolsTabs">
+        <button type="button" class="modal-tab active" data-tab="agents">Agents</button>
+        <button type="button" class="modal-tab" data-tab="sessions">Sessions</button>
+        <button type="button" class="modal-tab" data-tab="mcp">MCP</button>
+        <button type="button" class="modal-tab" data-tab="plugins">Plugins</button>
+        <button type="button" class="modal-tab" data-tab="cost">Cost</button>
+        <button type="button" class="modal-tab" data-tab="settings">Settings</button>
+      </div>
+      <div class="modal-body modal-body-scroll">
+        <div class="tools-pane" id="toolsPane-agents">
+          <p class="field-hint">Every interactive and background Claude Code session running under your user right now — not just chats started from this app.</p>
+          <div id="agentsList"></div>
+        </div>
+        <div class="tools-pane" id="toolsPane-sessions" hidden>
+          <p class="field-hint">Past sessions on disk for the current chat's working directory. Opening one resumes it in a new chat here.</p>
+          <div id="sessionsList"></div>
+        </div>
+        <div class="tools-pane" id="toolsPane-mcp" hidden>
+          <p class="field-hint" id="mcpListText">Loading…</p>
+          <form class="field-row" id="mcpAddForm">
+            <input type="text" class="text-input" id="mcpNameInput" placeholder="server-name" autocomplete="off" style="flex:0 0 140px" />
+            <input type="text" class="text-input" id="mcpJsonInput" placeholder='{"type":"stdio","command":"npx",...}' autocomplete="off" style="flex:1" />
+            <button type="submit" class="new-chat-btn" style="flex:0 0 auto; margin:0; width:auto;">Add</button>
+          </form>
+          <p class="field-hint">Adds via <code>claude mcp add-json</code> — paste the server's JSON config (stdio/http/sse/websocket).</p>
+          <form class="field-row" id="mcpRemoveForm">
+            <input type="text" class="text-input" id="mcpRemoveInput" placeholder="server-name to remove" autocomplete="off" style="flex:1" />
+            <button type="submit" class="stop-btn" style="flex:0 0 auto;">Remove</button>
+          </form>
+        </div>
+        <div class="tools-pane" id="toolsPane-plugins" hidden>
+          <div id="pluginsList"></div>
+        </div>
+        <div class="tools-pane" id="toolsPane-cost" hidden>
+          <div id="costSummary"></div>
+        </div>
+        <div class="tools-pane" id="toolsPane-settings" hidden>
+          <div class="field">
+            <span class="field-label">Accent color</span>
+            <div class="color-swatch-row" id="accentSwatchRow"></div>
+          </div>
+          <div class="field" style="margin-top:14px;">
+            <span class="field-label">Global show/hide hotkey</span>
+            <div class="field-row">
+              <input type="text" class="text-input" id="hotkeyInput" placeholder="Control+Alt+Space" autocomplete="off" style="flex:1" />
+              <button type="button" class="new-chat-btn" id="hotkeySaveBtn" style="flex:0 0 auto; margin:0; width:auto;">Save</button>
+            </div>
+            <p class="field-hint" id="hotkeyStatus"></p>
+          </div>
+          <div class="field" style="margin-top:14px;">
+            <label class="checkbox-row">
+              <input type="checkbox" id="loginItemCheckbox" />
+              <span>Launch Claude LinGUI when I log in</span>
+            </label>
+          </div>
+          <div class="field" style="margin-top:14px;">
+            <span class="field-label">Updates</span>
+            <div class="field-row">
+              <button type="button" class="new-chat-btn" id="checkUpdateBtn" style="flex:0 0 auto; margin:0; width:auto;">Check for updates</button>
+              <span class="field-hint" id="updateStatus"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ CLAUDE.md MODAL ============================ -->
+  <div class="modal-overlay" id="claudeMdOverlay" hidden>
+    <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="claudeMdTitle">
+      <div class="modal-header">
+        <h2 id="claudeMdTitle">CLAUDE.md</h2>
+        <button type="button" class="icon-btn" id="claudeMdCloseBtn" aria-label="Close">
+          <svg viewBox="0 0 24 24" width="16" height="16"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p class="field-hint" id="claudeMdPath"></p>
+        <textarea class="claude-md-editor" id="claudeMdEditor" spellcheck="false" placeholder="# Project instructions for Claude&#10;&#10;Notes, conventions, and context Claude should always have for this project…"></textarea>
+        <div class="field-row" style="margin-top:10px;">
+          <button type="button" class="new-chat-btn auth-modal-btn" id="claudeMdSaveBtn">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ IMAGE LIGHTBOX ============================ -->
+  <div class="lightbox-overlay" id="lightboxOverlay" hidden>
+    <img class="lightbox-img" id="lightboxImg" alt="" />
+  </div>
+
+  <!-- Templates -->
+  <template id="tpl-chat-list-item">
+    <button class="chat-item" data-id="">
+      <span class="chat-item-title"></span>
+      <span class="chat-item-sub"></span>
+      <span class="chat-item-actions">
+        <span class="chat-item-action chat-item-pin" title="Pin chat" aria-label="Pin chat">
+          <svg viewBox="0 0 24 24" width="13" height="13"><path d="M14.5 3l6.5 6.5-3 3 -1 5-2-2-5 5-1-1 5-5-2-2 5-1 3-3z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+        </span>
+        <span class="chat-item-action chat-item-archive" title="Archive chat" aria-label="Archive chat">
+          <svg viewBox="0 0 24 24" width="13" height="13"><path d="M4 7h16v3H4V7zm1 3h14v10H5V10zm4 3h6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/></svg>
+        </span>
+        <span class="chat-item-action chat-item-delete" title="Delete chat" aria-label="Delete chat">
+          <svg viewBox="0 0 24 24" width="13" height="13"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </span>
+      </span>
+    </button>
+  </template>
+
+  <template id="tpl-msg-user">
+    <div class="msg msg-user">
+      <div class="bubble bubble-user">
+        <div class="attachment-row"></div>
+        <div class="bubble-text"></div>
+        <div class="msg-actions">
+          <button type="button" class="msg-action-btn msg-copy-btn" title="Copy" aria-label="Copy message">
+            <svg viewBox="0 0 24 24" width="13" height="13"><path d="M8 8V5a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-3M8 8H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-3M8 8h7a1 1 0 0 1 1 1v7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <button type="button" class="msg-action-btn msg-edit-btn unavailable" title="Edit and resend" aria-label="Edit and resend">
+            <svg viewBox="0 0 24 24" width="13" height="13"><path d="M4 20l.9-3.6a2 2 0 0 1 .53-.94L16.5 4.4a1.5 1.5 0 0 1 2.12 0l1 1a1.5 1.5 0 0 1 0 2.12L8.55 18.57a2 2 0 0 1-.94.53L4 20z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+          </button>
+          <button type="button" class="msg-action-btn msg-regen-btn unavailable" title="Ask again" aria-label="Ask again">
+            <svg viewBox="0 0 24 24" width="13" height="13"><path d="M4 12a8 8 0 0 1 14-5.3M20 12a8 8 0 0 1-14 5.3M18.5 4v4h-4M5.5 20v-4h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <template id="tpl-attachment-chip">
+    <span class="attachment-chip">
+      <span class="attachment-chip-icon" aria-hidden="true"></span>
+      <span class="attachment-chip-name"></span>
+      <button type="button" class="attachment-chip-remove" aria-label="Remove attachment" hidden>
+        <svg viewBox="0 0 24 24" width="11" height="11"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+      </button>
+    </span>
+  </template>
+
+  <template id="tpl-attachment-thumb">
+    <span class="attachment-thumb-wrap">
+      <img class="attachment-thumb" />
+      <button type="button" class="attachment-chip-remove" aria-label="Remove attachment" hidden>
+        <svg viewBox="0 0 24 24" width="11" height="11"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+      </button>
+    </span>
+  </template>
+
+  <template id="tpl-msg-assistant">
+    <div class="msg msg-assistant">
+      <div class="avatar" aria-hidden="true">✦</div>
+      <div class="assistant-stack"></div>
+    </div>
+  </template>
+
+  <template id="tpl-block-text">
+    <div class="block block-text">
+      <button type="button" class="msg-action-btn block-copy-btn" title="Copy" aria-label="Copy response">
+        <svg viewBox="0 0 24 24" width="13" height="13"><path d="M8 8V5a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-3M8 8H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-3M8 8h7a1 1 0 0 1 1 1v7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="block-text-content"></div>
+    </div>
+  </template>
+
+  <template id="tpl-block-cloud-ack">
+    <div class="block block-cloud-ack"></div>
+  </template>
+
+  <template id="tpl-block-thinking">
+    <details class="block block-thinking">
+      <summary>Thinking</summary>
+      <div class="thinking-body"></div>
+    </details>
+  </template>
+
+  <template id="tpl-block-tool">
+    <details class="block block-tool">
+      <summary>
+        <span class="tool-icon" aria-hidden="true"></span>
+        <span class="tool-name"></span>
+        <span class="tool-summary"></span>
+        <span class="tool-status" aria-hidden="true"></span>
+      </summary>
+      <div class="tool-body">
+        <div class="tool-diff"></div>
+        <div class="tool-input"></div>
+        <div class="tool-result"></div>
+        <div class="tool-file-actions" hidden>
+          <button type="button" class="tool-file-action-btn tool-open-btn">Open file</button>
+          <button type="button" class="tool-file-action-btn tool-reveal-btn">Reveal in file manager</button>
+        </div>
+        <button type="button" class="tool-preview-btn" hidden>▶ Preview</button>
+      </div>
+    </details>
+  </template>
+
+  <template id="tpl-diff-line">
+    <div class="diff-line"><span class="diff-marker"></span><span class="diff-text"></span></div>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>

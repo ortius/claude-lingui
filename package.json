@@ -1,0 +1,65 @@
+{
+  "name": "claude-lingui",
+  "version": "1.0.0",
+  "description": "A clean desktop GUI for Claude Code — drives the claude CLI and renders its output as a real chat interface.",
+  "private": true,
+  "main": "main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "pack:linux": "electron-builder --linux dir",
+    "package:deb": "bash scripts/package-deb.sh",
+    "package:pacman": "bash scripts/package-pacman.sh",
+    "dist": "npm run pack:linux && npm run package:deb && npm run package:pacman",
+    "dist:fpm": "electron-builder --linux deb pacman"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "gui",
+    "electron"
+  ],
+  "author": {
+    "name": "Claude LinGUI",
+    "email": "ort@oservr.com"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^44.3.0",
+    "electron-builder": "^26.15.3"
+  },
+  "dependencies": {
+    "dompurify": "^3.4.15",
+    "highlight.js": "^11.12.0",
+    "marked": "^18.0.12"
+  },
+  "build": {
+    "appId": "com.claudelingui.app",
+    "productName": "Claude LinGUI",
+    "copyright": "Copyright © 2026",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main/**/*",
+      "renderer/**/*",
+      "package.json",
+      "!**/*.map"
+    ],
+    "linux": {
+      "icon": "build/icon.png",
+      "category": "Development",
+      "target": [
+        { "target": "deb", "arch": ["x64"] },
+        { "target": "pacman", "arch": ["x64"] }
+      ],
+      "executableName": "claude-lingui",
+      "synopsis": "A graphical desktop client for Claude Code",
+      "description": "Claude LinGUI drives the claude CLI and renders its streaming output as a real chat interface, with tool-call cards, markdown, and syntax highlighting."
+    },
+    "deb": {
+      "maintainer": "Claude LinGUI <ort@oservr.com>",
+      "depends": ["libgtk-3-0", "libnotify4", "libnss3", "libxss1", "libxtst6", "xdg-utils", "libatspi2.0-0", "libuuid1", "libsecret-1-0"]
+    }
+  }
+}
