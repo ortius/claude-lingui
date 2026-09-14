@@ -13,6 +13,7 @@ const MODELS = [
 ];
 
 const PERMISSION_MODES = [
+  { value: 'ask', label: 'Ask for each action' },
   { value: 'acceptEdits', label: 'Accept edits automatically' },
   { value: 'plan', label: 'Plan mode (read-only)' },
   { value: 'bypassPermissions', label: 'Full access (bypass all checks)' },
@@ -348,7 +349,88 @@ function renderBlockNode(block) {
     return node;
   }
 
+  if (block.kind === 'permission') {
+    if (!node) {
+      node = fromTemplate('tpl-block-permission');
+      domIndex.set(block.id, node);
+    }
+    node.querySelector('.permission-tool-name').textContent = block.toolName;
+    node.querySelector('.permission-input').textContent = JSON.stringify(block.input, null, 2);
+    wirePermissionActions(node, block);
+    return node;
+  }
+
+  if (block.kind === 'plan') {
+    if (!node) {
+      node = fromTemplate('tpl-block-plan');
+      domIndex.set(block.id, node);
+    }
+    node.querySelector('.plan-content').innerHTML = window.lingui.renderMarkdown(block.plan || '');
+    wirePermissionActions(node, block);
+    return node;
+  }
+
   return null;
+}
+
+/** Shared Allow/Deny/status wiring for both the generic tool-approval card and the plan-review card. */
+function wirePermissionActions(node, block) {
+  const allowBtn = node.querySelector('.permission-allow-btn');
+  const denyBtn = node.querySelector('.permission-deny-btn');
+  const alwaysBtn = node.querySelector('.permission-allow-always-btn'); // plan cards don't have this one
+  const actionsEl = node.querySelector('.permission-actions');
+  const statusEl = node.querySelector('.permission-status');
+
+  const resolved = block.status !== 'pending';
+  actionsEl.hidden = resolved;
+  statusEl.hidden = !resolved;
+  if (resolved) {
+    statusEl.classList.toggle('allowed', block.status === 'allowed');
+    statusEl.classList.toggle('denied', block.status === 'denied');
+    statusEl.textContent = block.status === 'allowed' ? '✓ Allowed' : '✕ Denied';
+    return;
+  }
+
+  allowBtn.onclick = () => resolvePermissionBlock(block, 'allow');
+  denyBtn.onclick = () => resolvePermissionBlock(block, 'deny');
+  if (alwaysBtn) alwaysBtn.onclick = () => resolvePermissionBlock(block, 'allow', { alwaysAllow: true });
+}
+
+const autoApprovedToolsByChat = new Map(); // chatId -> Set<toolName>, in-memory only (not persisted)
+
+async function resolvePermissionBlock(block, decision, opts) {
+  const chat = chats.get(block.chatId);
+  if (!chat) return;
+  const extra = decision === 'allow' ? {} : { message: 'User denied this action.' };
+  await window.lingui.respondPermission(block.chatId, block.requestId, decision, extra);
+  block.status = decision === 'allow' ? 'allowed' : 'denied';
+  if (opts && opts.alwaysAllow) {
+    if (!autoApprovedToolsByChat.has(block.chatId)) autoApprovedToolsByChat.set(block.chatId, new Set());
+    autoApprovedToolsByChat.get(block.chatId).add(block.toolName);
+  }
+  if (block.chatId === activeChatId) renderBlockNode(block);
+  scheduleSave(block.chatId);
+}
+
+/** A session's `claude` process is blocked waiting on this — arrives on its own side channel, not the regular stream_event flow. */
+function handlePermissionRequest(localId, req) {
+  const chat = chats.get(localId);
+  if (!chat) return;
+
+  const autoApproved = autoApprovedToolsByChat.get(localId);
+  if (autoApproved && autoApproved.has(req.toolName)) {
+    window.lingui.respondPermission(localId, req.id, 'allow', {});
+    return;
+  }
+
+  const isPlan = req.toolName === 'ExitPlanMode' && req.input && typeof req.input.plan === 'string';
+  const block = isPlan
+    ? { id: newId(), kind: 'plan', chatId: localId, requestId: req.id, plan: req.input.plan, status: 'pending' }
+    : { id: newId(), kind: 'permission', chatId: localId, requestId: req.id, toolName: req.toolName, input: req.input, status: 'pending' };
+
+  chat.blocks.push(block);
+  if (localId === activeChatId) appendBlockToDom(block);
+  scheduleSave(localId);
 }
 
 function appendBlockToDom(block, targetEl) {
@@ -1586,6 +1668,86 @@ async function logoutOfAccount() {
 }
 
 // ===========================================================================
+// Embedded terminal — a real pty running `claude`, for attaching to a
+// background session, or (interactive / Remote Control) anything that
+// needs a genuine TTY. Only one is open at a time.
+// ===========================================================================
+
+let terminalInstance = null;
+let terminalFitAddon = null;
+let terminalId = null;
+let terminalUnsubData = null;
+let terminalUnsubExit = null;
+
+function openTerminal(mode, opts) {
+  opts = opts || {};
+  closeTerminalProcess();
+
+  terminalId = newId();
+  document.getElementById('terminalModalTitle').textContent =
+    mode === 'attach' ? `Attached: ${opts.targetId}` : mode === 'remote-control' ? 'Remote Control session' : 'Interactive session';
+  document.getElementById('terminalModalOverlay').hidden = false;
+
+  const container = document.getElementById('terminalContainer');
+  container.innerHTML = '';
+  terminalInstance = new Terminal({
+    convertEol: true,
+    fontSize: 13,
+    fontFamily: 'SFMono-Regular, "JetBrains Mono", Consolas, "Liberation Mono", Menlo, monospace',
+    theme: { background: '#1a1a1a' },
+  });
+  terminalFitAddon = new FitAddon.FitAddon();
+  terminalInstance.loadAddon(terminalFitAddon);
+  terminalInstance.open(container);
+  terminalFitAddon.fit();
+
+  terminalInstance.onData((data) => window.lingui.terminalWrite(terminalId, data));
+  terminalInstance.onResize(({ cols, rows }) => window.lingui.terminalResize(terminalId, cols, rows));
+
+  terminalUnsubData = window.lingui.onTerminalData(({ id, data }) => {
+    if (id === terminalId && terminalInstance) terminalInstance.write(data);
+  });
+  terminalUnsubExit = window.lingui.onTerminalExit(({ id, info }) => {
+    if (id !== terminalId || !terminalInstance) return;
+    const code = info && info.exitCode != null ? ` (${info.exitCode})` : '';
+    terminalInstance.write(`\r\n\x1b[90m[process exited${code}]\x1b[0m\r\n`);
+  });
+
+  window.lingui.terminalStart(terminalId, {
+    mode,
+    targetId: opts.targetId,
+    cwd: opts.cwd,
+    cols: terminalInstance.cols,
+    rows: terminalInstance.rows,
+  });
+}
+
+function closeTerminalProcess() {
+  if (terminalUnsubData) {
+    terminalUnsubData();
+    terminalUnsubData = null;
+  }
+  if (terminalUnsubExit) {
+    terminalUnsubExit();
+    terminalUnsubExit = null;
+  }
+  if (terminalId) {
+    window.lingui.terminalStop(terminalId);
+    terminalId = null;
+  }
+  if (terminalInstance) {
+    terminalInstance.dispose();
+    terminalInstance = null;
+  }
+  terminalFitAddon = null;
+}
+
+function closeTerminalModal() {
+  document.getElementById('terminalModalOverlay').hidden = true;
+  closeTerminalProcess();
+}
+
+// ===========================================================================
 // Tools panel — machine-wide agents, past sessions, MCP servers, plugins,
 // a local cost rollup, and app settings (accent color, hotkey).
 // ===========================================================================
@@ -1627,6 +1789,13 @@ async function loadAgentsTab() {
   for (const agent of res.data) {
     const actions = [];
     if (agent.kind === 'background') {
+      actions.push({
+        label: 'Attach',
+        onClick: () => {
+          closeToolsModal();
+          openTerminal('attach', { targetId: agent.name, cwd: agent.cwd });
+        },
+      });
       actions.push({
         label: 'Stop',
         onClick: async () => {
@@ -1769,9 +1938,20 @@ function loadSettingsTab() {
   loadLoginItemState();
 }
 
+function loadTerminalTab() {
+  const label = document.getElementById('terminalDirLabel');
+  if (!label.dataset.path) {
+    const chat = chats.get(activeChatId);
+    const dir = (chat && chat.mode !== 'cloud' && chat.cwd) || homeDirPath;
+    label.textContent = dir;
+    label.dataset.path = dir;
+  }
+}
+
 const TOOLS_TAB_LOADERS = {
   agents: loadAgentsTab,
   sessions: loadSessionsTab,
+  terminal: loadTerminalTab,
   mcp: loadMcpTab,
   plugins: loadPluginsTab,
   cost: loadCostTab,
@@ -2306,7 +2486,7 @@ async function init() {
   newProjectLocationLabel.dataset.path = defaultNewProjectLocation;
 
   populateSelect(document.getElementById('welcomeModelSelect'), MODELS, settings.lastModel || 'default');
-  populateSelect(document.getElementById('welcomePermSelect'), PERMISSION_MODES, settings.lastPermissionMode || 'acceptEdits');
+  populateSelect(document.getElementById('welcomePermSelect'), PERMISSION_MODES, settings.lastPermissionMode || 'ask');
   applyProjectDefaultsFor(defaultCwd);
 
   document.getElementById('welcomeDirBtn').addEventListener('click', async () => {
@@ -2514,6 +2694,27 @@ async function init() {
     }
   });
 
+  // Terminal (Tools → Terminal tab, and the modal itself)
+  document.getElementById('terminalDirBtn').addEventListener('click', () => {
+    const label = document.getElementById('terminalDirLabel');
+    pickDirectoryInto(label, label.dataset.path || homeDirPath);
+  });
+  document.getElementById('terminalOpenBtn').addEventListener('click', () => {
+    closeToolsModal();
+    openTerminal('interactive', { cwd: document.getElementById('terminalDirLabel').dataset.path || homeDirPath });
+  });
+  document.getElementById('terminalRemoteBtn').addEventListener('click', () => {
+    closeToolsModal();
+    openTerminal('remote-control', { cwd: document.getElementById('terminalDirLabel').dataset.path || homeDirPath });
+  });
+  document.getElementById('terminalModalCloseBtn').addEventListener('click', closeTerminalModal);
+  document.getElementById('terminalModalOverlay').addEventListener('click', (e) => {
+    if (e.target.id === 'terminalModalOverlay') closeTerminalModal();
+  });
+  window.addEventListener('resize', () => {
+    if (terminalFitAddon && !document.getElementById('terminalModalOverlay').hidden) terminalFitAddon.fit();
+  });
+
   // CLAUDE.md modal
   document.getElementById('claudeMdBtn').addEventListener('click', openClaudeMdModal);
   document.getElementById('claudeMdCloseBtn').addEventListener('click', closeClaudeMdModal);
@@ -2578,6 +2779,7 @@ async function init() {
       showBanner(`Couldn't start Claude: ${message}`, true, () => resendLastMessage(localId));
     }
   });
+  window.lingui.onPermissionRequest(({ localId, req }) => handlePermissionRequest(localId, req));
 
   await refreshSidebarList();
 

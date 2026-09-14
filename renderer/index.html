@@ -6,6 +6,7 @@
   <title>Claude LinGUI</title>
   <link rel="stylesheet" href="vendor/hljs-light.css" id="hljsLight" />
   <link rel="stylesheet" href="vendor/hljs-dark.css" id="hljsDark" />
+  <link rel="stylesheet" href="vendor/xterm.css" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -280,6 +281,7 @@
       <div class="modal-tabs" id="toolsTabs">
         <button type="button" class="modal-tab active" data-tab="agents">Agents</button>
         <button type="button" class="modal-tab" data-tab="sessions">Sessions</button>
+        <button type="button" class="modal-tab" data-tab="terminal">Terminal</button>
         <button type="button" class="modal-tab" data-tab="mcp">MCP</button>
         <button type="button" class="modal-tab" data-tab="plugins">Plugins</button>
         <button type="button" class="modal-tab" data-tab="cost">Cost</button>
@@ -293,6 +295,23 @@
         <div class="tools-pane" id="toolsPane-sessions" hidden>
           <p class="field-hint">Past sessions on disk for the current chat's working directory. Opening one resumes it in a new chat here.</p>
           <div id="sessionsList"></div>
+        </div>
+        <div class="tools-pane" id="toolsPane-terminal" hidden>
+          <p class="field-hint">
+            A real interactive <code>claude</code> session in an embedded terminal — for things a
+            chat window structurally can't do: Remote Control, <code>/rewind</code>, and anything
+            else that needs a genuine TTY. It's the actual CLI, not a re-implementation.
+          </p>
+          <div class="field">
+            <span class="field-label">Working directory</span>
+            <button type="button" class="dir-picker" id="terminalDirBtn">
+              <span id="terminalDirLabel">Choose a folder…</span>
+            </button>
+          </div>
+          <div class="field-row" style="margin-top:10px;">
+            <button type="button" class="new-chat-btn" id="terminalOpenBtn" style="flex:1; margin:0;">Open interactive session</button>
+            <button type="button" class="new-chat-btn" id="terminalRemoteBtn" style="flex:1; margin:0;">Open with Remote Control</button>
+          </div>
         </div>
         <div class="tools-pane" id="toolsPane-mcp" hidden>
           <p class="field-hint" id="mcpListText">Loading…</p>
@@ -366,6 +385,19 @@
   <!-- ============================ IMAGE LIGHTBOX ============================ -->
   <div class="lightbox-overlay" id="lightboxOverlay" hidden>
     <img class="lightbox-img" id="lightboxImg" alt="" />
+  </div>
+
+  <!-- ============================ TERMINAL MODAL ============================ -->
+  <div class="modal-overlay" id="terminalModalOverlay" hidden>
+    <div class="modal modal-wide modal-terminal" role="dialog" aria-modal="true" aria-labelledby="terminalModalTitle">
+      <div class="modal-header">
+        <h2 id="terminalModalTitle">Terminal</h2>
+        <button type="button" class="icon-btn" id="terminalModalCloseBtn" aria-label="Close">
+          <svg viewBox="0 0 24 24" width="16" height="16"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <div class="terminal-container" id="terminalContainer"></div>
+    </div>
   </div>
 
   <!-- Templates -->
@@ -478,6 +510,39 @@
     <div class="diff-line"><span class="diff-marker"></span><span class="diff-text"></span></div>
   </template>
 
+  <template id="tpl-block-permission">
+    <div class="block block-permission">
+      <div class="permission-header">
+        <span class="permission-icon" aria-hidden="true">🔒</span>
+        <span>Claude wants to use <span class="permission-tool-name"></span></span>
+      </div>
+      <div class="permission-input"></div>
+      <div class="permission-actions">
+        <button type="button" class="permission-btn permission-deny-btn">Deny</button>
+        <button type="button" class="permission-btn permission-allow-always-btn">Always allow this session</button>
+        <button type="button" class="permission-btn permission-allow-btn primary">Allow</button>
+      </div>
+      <div class="permission-status" hidden></div>
+    </div>
+  </template>
+
+  <template id="tpl-block-plan">
+    <div class="block block-plan">
+      <div class="permission-header">
+        <span class="permission-icon" aria-hidden="true">📋</span>
+        <span>Claude's plan — ready to start executing it?</span>
+      </div>
+      <div class="plan-content"></div>
+      <div class="permission-actions">
+        <button type="button" class="permission-btn permission-deny-btn">Keep planning</button>
+        <button type="button" class="permission-btn permission-allow-btn primary">Approve &amp; start</button>
+      </div>
+      <div class="permission-status" hidden></div>
+    </div>
+  </template>
+
+  <script src="vendor/xterm.js"></script>
+  <script src="vendor/addon-fit.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

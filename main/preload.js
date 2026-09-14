@@ -85,6 +85,12 @@ contextBridge.exposeInMainWorld('lingui', {
   hasActiveSession: (localId) => ipcRenderer.invoke('session:has-active', localId),
   sendMessage: (localId, text, opts) => ipcRenderer.invoke('session:send', { localId, text, opts }),
   stopSession: (localId) => ipcRenderer.invoke('session:stop', localId),
+  respondPermission: (localId, requestId, decision, extra) => ipcRenderer.invoke('session:permission-respond', { localId, requestId, decision, extra }),
+  onPermissionRequest: (cb) => {
+    const listener = (_evt, payload) => cb(payload);
+    ipcRenderer.on('session:permission-request', listener);
+    return () => ipcRenderer.removeListener('session:permission-request', listener);
+  },
 
   onSessionEvent: (cb) => {
     const listener = (_evt, payload) => cb(payload);
@@ -165,6 +171,22 @@ contextBridge.exposeInMainWorld('lingui', {
 
   // --- Update check ---
   checkUpdate: () => ipcRenderer.invoke('app:check-update'),
+
+  // --- Embedded terminal (attach / interactive / Remote Control) ---
+  terminalStart: (id, opts) => ipcRenderer.invoke('terminal:start', { id, ...opts }),
+  terminalWrite: (id, data) => ipcRenderer.invoke('terminal:write', { id, data }),
+  terminalResize: (id, cols, rows) => ipcRenderer.invoke('terminal:resize', { id, cols, rows }),
+  terminalStop: (id) => ipcRenderer.invoke('terminal:stop', id),
+  onTerminalData: (cb) => {
+    const listener = (_evt, payload) => cb(payload);
+    ipcRenderer.on('terminal:data', listener);
+    return () => ipcRenderer.removeListener('terminal:data', listener);
+  },
+  onTerminalExit: (cb) => {
+    const listener = (_evt, payload) => cb(payload);
+    ipcRenderer.on('terminal:exit', listener);
+    return () => ipcRenderer.removeListener('terminal:exit', listener);
+  },
 
   platform: process.platform,
 });

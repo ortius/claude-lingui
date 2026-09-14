@@ -908,3 +908,43 @@ textarea { font-family: inherit; }
   background: var(--bg-elevated); color: var(--text-muted); font-size: 11.5px; cursor: pointer;
 }
 .tool-file-action-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ============================================================
+   Permission requests (interactive approve/deny + plan review)
+   ============================================================ */
+.block-permission, .block-plan {
+  border: 1px solid var(--accent); border-radius: var(--radius-sm);
+  background: var(--accent-soft); padding: 12px 14px;
+  font-size: 13px; display: flex; flex-direction: column; gap: 10px;
+}
+.permission-header { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.permission-icon { font-size: 15px; }
+.permission-tool-name { font-family: var(--font-mono); }
+.permission-input {
+  background: var(--code-bg); border-radius: 7px; padding: 8px 10px;
+  font-family: var(--font-mono); font-size: 12px; white-space: pre-wrap;
+  word-break: break-word; max-height: 200px; overflow-y: auto;
+}
+.plan-content {
+  background: var(--bg-elevated); border-radius: 7px; padding: 10px 14px;
+  max-height: 360px; overflow-y: auto; font-size: 13.5px;
+}
+.permission-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.permission-btn {
+  padding: 6px 13px; border-radius: 999px; border: 1px solid var(--border);
+  background: var(--bg-elevated); color: var(--text-muted); font-size: 12px; font-weight: 500; cursor: pointer;
+}
+.permission-btn:hover { border-color: var(--accent); color: var(--accent); }
+.permission-deny-btn:hover { border-color: var(--danger); color: var(--danger); }
+.permission-btn.primary { background: var(--accent); color: var(--accent-contrast); border-color: var(--accent); }
+.permission-btn.primary:hover { background: var(--accent-hover); color: var(--accent-contrast); }
+.permission-status { font-size: 12px; font-weight: 500; text-align: right; }
+.permission-status.allowed { color: var(--success); }
+.permission-status.denied { color: var(--danger); }
+
+/* ============================================================
+   Embedded terminal (attach / interactive / Remote Control)
+   ============================================================ */
+.modal-terminal { max-width: 920px; width: 90vw; height: 78vh; display: flex; flex-direction: column; }
+.terminal-container { flex: 1; min-height: 0; background: #1a1a1a; padding: 10px; }
+.terminal-container .xterm { height: 100%; }

@@ -8,8 +8,12 @@
 
 const { spawn } = require('child_process');
 const { EventEmitter } = require('events');
+const path = require('path');
+const { PermissionBridge } = require('./permissionBridge');
 
 const CLAUDE_BIN = process.env.CLAUDE_LINGUI_BIN || 'claude';
+const PERMISSION_MCP_SERVER_PATH = path.join(__dirname, 'permissionMcpServer.js');
+const PERMISSION_TOOL_NAME = 'mcp__lingui_permissions__approval_prompt';
 
 /**
  * Turns a text turn plus renderer-prepared attachments into a Messages-API
@@ -47,6 +51,7 @@ class ClaudeSession extends EventEmitter {
     this.sessionId = opts.resumeSessionId || null;
     this.alive = false;
     this._stdoutBuf = '';
+    this.permissionBridge = null;
   }
 
   start() {
@@ -61,11 +66,32 @@ class ClaudeSession extends EventEmitter {
     if (this.opts.model && this.opts.model !== 'default') {
       args.push('--model', this.opts.model);
     }
-    if (this.opts.permissionMode) {
+    // 'ask' means "the CLI's own true default" — no --permission-mode flag
+    // at all — which is what actually triggers per-action prompting (mode
+    // values like acceptEdits/plan are all *more* permissive than that).
+    if (this.opts.permissionMode && this.opts.permissionMode !== 'ask') {
       args.push('--permission-mode', this.opts.permissionMode);
     }
     if (this.opts.resumeSessionId) {
       args.push('--resume', this.opts.resumeSessionId);
+    }
+
+    // Real interactive approval — including plan-mode's Exit Plan Mode
+    // review — for anything the chosen mode doesn't already blanket-allow.
+    // Skipped for bypassPermissions, where nothing prompts anyway.
+    if (this.opts.permissionMode !== 'bypassPermissions') {
+      this.permissionBridge = new PermissionBridge((req) => this.emit('permission-request', req));
+      const socketPath = this.permissionBridge.start();
+      const mcpConfig = JSON.stringify({
+        mcpServers: {
+          lingui_permissions: {
+            command: process.execPath,
+            args: [PERMISSION_MCP_SERVER_PATH],
+            env: { ELECTRON_RUN_AS_NODE: '1', LINGUI_PERM_SOCKET: socketPath },
+          },
+        },
+      });
+      args.push('--permission-prompt-tool', PERMISSION_TOOL_NAME, '--mcp-config', mcpConfig);
     }
 
     let child;
@@ -76,6 +102,10 @@ class ClaudeSession extends EventEmitter {
         stdio: ['pipe', 'pipe', 'pipe'],
       });
     } catch (err) {
+      if (this.permissionBridge) {
+        this.permissionBridge.stop();
+        this.permissionBridge = null;
+      }
       this.emit('spawn-error', String(err && err.message ? err.message : err));
       return;
     }
@@ -98,8 +128,17 @@ class ClaudeSession extends EventEmitter {
 
     child.on('exit', (code, signal) => {
       this.alive = false;
+      if (this.permissionBridge) {
+        this.permissionBridge.stop();
+        this.permissionBridge = null;
+      }
       this.emit('exit', { code, signal });
     });
+  }
+
+  /** Answers a pending permission-request (see the 'permission-request' event). */
+  respondPermission(requestId, decision, extra) {
+    return this.permissionBridge ? this.permissionBridge.respond(requestId, decision, extra) : false;
   }
 
   _handleStdout(chunk) {
@@ -169,6 +208,7 @@ class SessionManager {
     session.on('raw-line', (line) => handlers.onRawLine && handlers.onRawLine(line));
     session.on('stderr', (chunk) => handlers.onStderr && handlers.onStderr(chunk));
     session.on('spawn-error', (msg) => handlers.onSpawnError && handlers.onSpawnError(msg));
+    session.on('permission-request', (req) => handlers.onPermissionRequest && handlers.onPermissionRequest(req));
     session.on('exit', (info) => {
       handlers.onExit && handlers.onExit(info);
       this.sessions.delete(localId);
@@ -184,6 +224,11 @@ class SessionManager {
       throw new Error('No active session for this chat. Send a message to start a new one.');
     }
     session.sendMessage(text, attachments);
+  }
+
+  respondPermission(localId, requestId, decision, extra) {
+    const session = this.sessions.get(localId);
+    return session ? session.respondPermission(requestId, decision, extra) : false;
   }
 
   /**

@@ -115,56 +115,67 @@ Not (yet) code-signed — Linux doesn't require that to run, unlike Windows/Mac.
   default with a manual override.
 - **Multiple windows** — open another window from any chat's topbar to work
   on two chats side by side; they share the same sessions and settings.
-
-### Not included, and why
-
-- **Remote Control** (controlling a session from claude.ai/code or the
-  mobile app) — tested it directly: passing `--remote-control` alongside the
-  headless `--print`/stream-json mode this app uses is accepted but is a
-  no-op, since Remote Control mirrors an actual interactive terminal
-  session, which headless mode doesn't have. Nothing to wire up.
-- **Attaching a real terminal to a background session** (`claude attach`) —
-  the Tools panel's Agents tab can list, stop, and remove background
-  sessions, but actually attaching one live would mean embedding a real
-  terminal emulator (a pty + something like xterm.js) alongside the chat
-  view, which is a bigger, separate feature.
-- **Per-tool interactive permission prompts** and a **plan-mode approval
-  flow** — both would need the CLI's `--permission-prompt-tool` MCP callback
-  protocol wired up as a real approve/deny round-trip; see "Permission
-  modes" below for what's there instead.
-- **`/rewind` checkpoints** — terminal/TTY-only, no scriptable equivalent as
-  of the CLI version this was built against.
+- **An embedded terminal** (Tools → Terminal, or "Attach" on a background
+  session in the Agents tab) — a real pty running the actual `claude`
+  binary, rendered with xterm.js. Because it's a genuine interactive TTY
+  and not a re-implementation, everything that only works in a real
+  terminal comes along for free: Remote Control (on by default — every
+  interactive session prints a claude.ai/code link), `/rewind`, and
+  `claude attach <id>` on a background session.
+- **Real per-tool permission prompts and plan-mode approval** — see
+  "Permission modes" below.
 
 ## Permission modes
 
-The CLI's own interactive permission prompts don't have anywhere to go in
-`--print` mode, so the app exposes three modes up front instead of prompting
-per-action:
+`--print` mode's own permission prompts have nowhere to go by default, but
+`claude` ships exactly the hook this app needs: `--permission-prompt-tool`
+lets a named MCP tool decide, per call. The app registers a small
+purpose-built MCP server ([`main/permissionMcpServer.js`](main/permissionMcpServer.js))
+for this — each pending decision crosses a local Unix socket
+([`main/permissionBridge.js`](main/permissionBridge.js)) to the main
+process, which asks the chat UI and waits for you to click Allow or Deny.
+`ExitPlanMode` (how Claude asks to leave plan mode and start executing) is
+just another tool call under the same mechanism, so it gets its own
+plan-review card with the rendered plan instead of a raw permission prompt.
 
-- **Accept edits automatically** — Claude can read/write files freely; other
-  actions follow the CLI's normal defaults.
-- **Plan mode** — read-only; Claude can't change anything.
+Four modes, in the picker on any new chat:
+
+- **Ask for each action** (default) — the CLI's real default behavior: safe
+  reads run immediately, anything else shows an inline Allow/Deny card
+  (with an "always allow this session" option per tool name).
+- **Accept edits automatically** — reads and edits run without asking;
+  anything else (Bash, etc.) still prompts.
+- **Plan mode** — read-only; Claude can look around and propose a plan, and
+  exiting plan mode to start executing shows the plan-review card.
 - **Full access** — bypasses all permission checks, including running shell
-  commands. The app asks you to confirm before starting a chat in this mode.
-  Only use it in a directory you trust.
+  commands. No prompts of any kind. The app asks you to confirm before
+  starting a chat in this mode. Only use it in a directory you trust.
 
 ## Project layout
 
 ```
 main/            Electron main process
-  main.js          windows (multi-window aware) + all IPC wiring
-  claudeSession.js spawns/manages `claude -p --input-format stream-json
-                    --output-format stream-json` subprocesses
-  authManager.js   drives `claude auth login/logout/status` for the Account panel
-  cliTools.js      wraps `claude mcp/plugin/agents` and past-session listing
-                    for the Tools panel
-  trayManager.js   system tray icon, global hotkey, desktop notifications
-  store.js         local JSON persistence (settings + chat history)
-  preload.js       secure bridge to the renderer (also does markdown
-                    rendering + sanitization, via marked/highlight.js/DOMPurify)
+  main.js               windows (multi-window aware) + all IPC wiring
+  claudeSession.js       spawns/manages `claude -p --input-format stream-json
+                         --output-format stream-json` subprocesses; wires up
+                         the permission bridge per chat
+  permissionBridge.js    Unix-socket relay between a chat's permission MCP
+                         server and the renderer's Allow/Deny UI
+  permissionMcpServer.js standalone MCP stdio server `claude` itself spawns
+                         for --permission-prompt-tool (see "Permission modes")
+  ptyManager.js          real pty sessions (node-pty) backing the embedded
+                         terminal — interactive / attach / Remote Control
+  authManager.js         drives `claude auth login/logout/status` for the Account panel
+  cliTools.js            wraps `claude mcp/plugin/agents` and past-session listing
+                         for the Tools panel
+  trayManager.js         system tray icon, global hotkey, desktop notifications
+  store.js               local JSON persistence (settings + chat history)
+  preload.js              secure bridge to the renderer (also does markdown
+                         rendering + sanitization, via marked/highlight.js/DOMPurify)
 renderer/        The UI (plain HTML/CSS/JS, no framework/build step)
   index.html, styles.css, app.js
-  vendor/          bundled highlight.js light/dark themes, app icon
+  vendor/          bundled highlight.js light/dark themes, xterm.js + its
+                    fit addon, app icon
 scripts/         package-deb.sh, package-pacman.sh — see "Installing it above"
 build/           icon.png (app icon; only build-time asset)
 ```
@@ -196,10 +207,10 @@ doesn't support streaming a reply back in print mode at all.
 
 ## Known limitations
 
-- No inline approval for individual tool calls — see "Permission modes"
-  above. A future version could support this via a permission-prompt tool.
-- One CLI process per open chat; very large numbers of simultaneously open
-  chats will spawn that many subprocesses.
+- One CLI process per open chat, plus a small companion MCP-server process
+  per chat for the permission relay (skipped only in Full access mode);
+  very large numbers of simultaneously open chats will spawn that many
+  subprocesses.
 - Linux only. A Windows build could be cross-compiled but would be unsigned
   (SmartScreen warning) and untested on real Windows; a Mac build needs an
   actual Mac plus an Apple developer certificate to sign, neither available
@@ -216,6 +227,16 @@ doesn't support streaming a reply back in print mode at all.
   `findInPage` — if the match counter doesn't update in your environment,
   it's a Chromium/Electron-level issue, not something this app's code does
   differently per-platform.
+- If your checkout path contains a space, `npm run dist`'s Electron-native
+  rebuild step for `node-pty` (the embedded terminal's dependency) logs a
+  `node-gyp`/[space-in-path](https://github.com/nodejs/node-gyp/issues/65)
+  error and skips rebuilding — harmless here since `node-pty` 1.1.0 is
+  N-API-based (ABI-stable across Node/Electron versions regardless), and
+  the packaged terminal works fine either way (verified directly against a
+  built package). If you ever need a real from-source rebuild of a
+  non-N-API native dependency from a space-containing path, build via a
+  space-free symlink instead (`ln -s "$PWD" ~/claude-lingui-build && cd
+  ~/claude-lingui-build && npm install`).
 
 ## Contributing
 

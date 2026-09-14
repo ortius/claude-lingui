@@ -10,6 +10,7 @@ const { SessionManager } = require('./claudeSession');
 const { AuthManager } = require('./authManager');
 const { TrayManager, notify, DEFAULT_ACCELERATOR } = require('./trayManager');
 const cliTools = require('./cliTools');
+const { PtyManager } = require('./ptyManager');
 
 const ICON_PATH = path.join(__dirname, '..', 'build', 'icon.png');
 
@@ -22,6 +23,7 @@ let tray = null;
 let isQuitting = false;
 const manager = new SessionManager();
 const authManager = new AuthManager();
+const ptyManager = new PtyManager();
 
 const CLAUDE_BIN = process.env.CLAUDE_LINGUI_BIN || 'claude';
 
@@ -160,6 +162,7 @@ app.on('before-quit', () => {
   isQuitting = true;
   manager.destroyAll();
   authManager.cancelLogin();
+  ptyManager.killAll();
   if (tray) tray.destroy();
 });
 
@@ -311,6 +314,17 @@ ipcMain.handle('session:send', (_evt, { localId, text, opts }) => {
       onRawLine: (line) => broadcast('session:raw-line', { localId, line }),
       onStderr: (chunk) => broadcast('session:stderr', { localId, chunk }),
       onSpawnError: (message) => broadcast('session:spawn-error', { localId, message }),
+      onPermissionRequest: (req) => {
+        broadcast('session:permission-request', { localId, req });
+        if (!anyWindowFocused()) {
+          const label = opts && opts.cwd ? path.basename(opts.cwd) : 'Claude';
+          notify({
+            title: `${label} — needs your OK`,
+            body: `Wants to use ${req.toolName}`,
+            onClick: () => tray && tray.showWindow(),
+          });
+        }
+      },
       onExit: (info) => broadcast('session:exit', { localId, info }),
     });
     // Give the process a tick to attach stdin before writing. Writing
@@ -329,6 +343,10 @@ ipcMain.handle('session:stop', (_evt, localId) => {
   manager.stop(localId);
   return { ok: true };
 });
+
+ipcMain.handle('session:permission-respond', (_evt, { localId, requestId, decision, extra }) => ({
+  ok: manager.respondPermission(localId, requestId, decision, extra),
+}));
 
 // ---------------------------------------------------------------------------
 // Tray hotkey
@@ -567,4 +585,45 @@ ipcMain.handle('app:check-update', () => {
     req.on('timeout', () => req.destroy(new Error('Timed out reaching GitHub.')));
     req.end();
   });
+});
+
+// ---------------------------------------------------------------------------
+// Embedded terminal — a real pty running `claude`, for things a headless
+// `-p` session structurally can't do: attaching to a background session,
+// and anything that needs a genuine interactive TTY (Remote Control,
+// /rewind, and any other terminal-only feature all just work here, native,
+// because it IS a real terminal).
+// ---------------------------------------------------------------------------
+
+ipcMain.handle('terminal:start', (evt, { id, mode, targetId, cwd, cols, rows }) => {
+  const win = BrowserWindow.fromWebContents(evt.sender);
+  let args;
+  if (mode === 'attach') args = ['attach', targetId];
+  else if (mode === 'remote-control') args = ['--remote-control'];
+  else args = [];
+
+  ptyManager.spawn(
+    id,
+    { command: CLAUDE_BIN, args, cwd: cwd || os.homedir(), cols, rows },
+    {
+      onData: (data) => win && !win.isDestroyed() && win.webContents.send('terminal:data', { id, data }),
+      onExit: (info) => win && !win.isDestroyed() && win.webContents.send('terminal:exit', { id, info }),
+    }
+  );
+  return { ok: true };
+});
+
+ipcMain.handle('terminal:write', (_evt, { id, data }) => {
+  ptyManager.write(id, data);
+  return { ok: true };
+});
+
+ipcMain.handle('terminal:resize', (_evt, { id, cols, rows }) => {
+  ptyManager.resize(id, cols, rows);
+  return { ok: true };
+});
+
+ipcMain.handle('terminal:stop', (_evt, id) => {
+  ptyManager.kill(id);
+  return { ok: true };
 });
