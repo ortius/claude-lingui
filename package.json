@@ -23,6 +23,14 @@
     "email": "ort@oservr.com"
   },
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ortius/claude-lingui.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ortius/claude-lingui/issues"
+  },
+  "homepage": "https://github.com/ortius/claude-lingui#readme",
   "devDependencies": {
     "electron": "^44.3.0",
     "electron-builder": "^26.15.3"
