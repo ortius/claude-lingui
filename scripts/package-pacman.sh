@@ -68,7 +68,11 @@ EOF
 cd "$BUILD_DIR"
 # BUILDDIR must be writable and is where makepkg stages pkg/ — keep it local
 # to the packaging dir rather than polluting the project root.
-makepkg -f --noconfirm --skipchecksums
+# --nodeps: package() only copies pre-built files, it doesn't compile or
+# link against the runtime deps in `depends=()` — those just need to be
+# *installed* on whoever runs the package, not on the machine building it
+# (a minimal build container/CI image won't have gtk3/nss/etc. present).
+makepkg -f --noconfirm --skipchecksums --nodeps
 
 OUT=$(ls -1 ./*.pkg.tar.zst | head -n1)
 mkdir -p "$PROJECT_ROOT/dist"
