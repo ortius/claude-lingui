@@ -14,6 +14,19 @@ const { PtyManager } = require('./ptyManager');
 
 const ICON_PATH = path.join(__dirname, '..', 'build', 'icon.png');
 
+// Must be called before 'ready'. Without it, Electron falls back to an
+// auto-generated slug for the Wayland app_id / X11 WM_CLASS — and per
+// Electron's own docs, that's what's used to match the app's icon and
+// window grouping on Linux. It has to match the installed .desktop file's
+// base filename exactly (see packaging/*.desktop and the deb/pacman
+// scripts, which both install as claude-lingui.desktop) — confirmed via a
+// real KDE Plasma install that the icon doesn't show up without this,
+// even with the .desktop file and icon correctly in place and the KDE
+// desktop-entry cache freshly rebuilt.
+if (process.platform === 'linux') {
+  app.setDesktopName('claude-lingui.desktop');
+}
+
 /** @type {Set<BrowserWindow>} every open app window — sessions are shared across all of them. */
 const windows = new Set();
 /** The window that hides-to-tray on close instead of quitting; secondary ("New Window") windows just close normally. */
