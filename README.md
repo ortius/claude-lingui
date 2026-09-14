@@ -57,6 +57,13 @@ conventional electron-builder path instead.
 
 Not (yet) code-signed — Linux doesn't require that to run, unlike Windows/Mac.
 
+**On KDE Plasma, the app icon may not show up** (titlebar or taskbar) right
+after installing, even though the `.desktop` file and icon are correctly in
+place — Plasma caches desktop entries separately from GTK
+(`kbuildsycoca6`, a per-user cache our package can't rebuild for you during
+a root-run install). Run `kbuildsycoca6 --noincremental` once and restart
+the app to fix it.
+
 ## What it does
 
 - **Pick a working directory, model, and permission mode**, then chat. Claude
