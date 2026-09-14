@@ -1,0 +1,89 @@
+name: Release
+
+# Builds the .deb (on Ubuntu) and Arch pacman (inside an Arch container —
+# makepkg only runs on Arch) packages and attaches them to a GitHub Release.
+#
+# Push a tag like `v1.0.1` to build and publish a real release. You can also
+# run this manually (workflow_dispatch) to sanity-check the build without
+# publishing anything — the release step only runs for an actual tag push.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build-deb:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run pack:linux
+      - run: npm run package:deb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deb-package
+          path: dist/*.deb
+          if-no-files-found: error
+
+  build-pacman:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:base-devel
+    steps:
+      # actions/checkout needs git; makepkg refuses to run as root, so the
+      # rest of the job runs as an unprivileged "builder" user it creates.
+      - name: Install build dependencies
+        run: pacman -Sy --noconfirm --needed nodejs npm git
+
+      - uses: actions/checkout@v4
+
+      - name: Create unprivileged build user
+        run: |
+          useradd -m builder
+          chown -R builder:builder "$GITHUB_WORKSPACE"
+
+      - name: Build
+        run: |
+          su builder -c "
+            set -e
+            cd '$GITHUB_WORKSPACE'
+            npm ci
+            npm run pack:linux
+            npm run package:pacman
+          "
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pacman-package
+          path: dist/*.pkg.tar.zst
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build-deb, build-pacman]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Collect packages
+        run: |
+          mkdir -p release-files
+          find artifacts -type f \( -name '*.deb' -o -name '*.pkg.tar.zst' \) -exec cp {} release-files/ \;
+          ls -la release-files
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" release-files/* \
+            --title "${{ github.ref_name }}" \
+            --generate-notes

@@ -15,6 +15,8 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 PROJECT_ROOT="$(pwd)"
 
 VERSION="$(node -p "require('./package.json').version")"
+MAINTAINER_EMAIL="$(node -p "require('./package.json').author.email")"
+HOMEPAGE="$(node -p "require('./package.json').homepage")"
 ARCH="amd64"
 PKG="claude-lingui"
 APPDIR="$PROJECT_ROOT/dist/linux-unpacked"
@@ -60,8 +62,8 @@ Section: devel
 Priority: optional
 Architecture: ${ARCH}
 Installed-Size: ${INSTALLED_KB}
-Maintainer: Claude LinGUI <p2vr7n2dhk@privaterelay.appleid.com>
-Homepage: https://claude.com/claude-code
+Maintainer: Claude LinGUI <${MAINTAINER_EMAIL}>
+Homepage: ${HOMEPAGE}
 Depends: libgtk-3-0, libnotify4, libnss3, libxss1, libxtst6, xdg-utils, libatspi2.0-0, libuuid1, libsecret-1-0
 Description: A graphical desktop client for Claude Code
  Claude LinGUI drives the claude CLI and renders its streaming output as

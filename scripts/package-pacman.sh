@@ -14,6 +14,9 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 PROJECT_ROOT="$(pwd)"
 
 VERSION="$(node -p "require('./package.json').version")"
+MAINTAINER_EMAIL="$(node -p "require('./package.json').author.email")"
+HOMEPAGE="$(node -p "require('./package.json').homepage")"
+LICENSE="$(node -p "require('./package.json').license")"
 APPDIR="$PROJECT_ROOT/dist/linux-unpacked"
 
 if [ ! -d "$APPDIR" ]; then
@@ -38,14 +41,14 @@ Categories=Development;Utility;
 EOF
 
 cat > "$BUILD_DIR/PKGBUILD" <<EOF
-# Maintainer: Claude LinGUI <p2vr7n2dhk@privaterelay.appleid.com>
+# Maintainer: Claude LinGUI <${MAINTAINER_EMAIL}>
 pkgname=claude-lingui
 pkgver=${VERSION}
 pkgrel=1
 pkgdesc="A graphical desktop client for Claude Code"
 arch=('x86_64')
-url="https://claude.com/claude-code"
-license=('unlicense')
+url="${HOMEPAGE}"
+license=('${LICENSE}')
 depends=('gtk3' 'nss' 'libxss' 'libxtst' 'at-spi2-core' 'libsecret' 'xdg-utils' 'alsa-lib' 'libnotify')
 options=('!strip' '!debug' '!emptydirs')
 
