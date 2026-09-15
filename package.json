@@ -1,6 +1,6 @@
 {
   "name": "claude-lingui",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A clean desktop GUI for Claude Code — drives the claude CLI and renders its output as a real chat interface.",
   "private": true,
   "main": "main/main.js",
