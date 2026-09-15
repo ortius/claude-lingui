@@ -75,6 +75,10 @@ jobs:
     permissions:
       contents: write
     steps:
+      # gh release create --generate-notes needs a git repo/commit history
+      # to generate notes from — this job otherwise never checks anything out.
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
