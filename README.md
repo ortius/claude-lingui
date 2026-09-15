@@ -59,10 +59,13 @@ Not (yet) code-signed — Linux doesn't require that to run, unlike Windows/Mac.
 
 **On KDE Plasma, the app icon may not show up** (titlebar or taskbar) right
 after installing, even though the `.desktop` file and icon are correctly in
-place — Plasma caches desktop entries separately from GTK
-(`kbuildsycoca6`, a per-user cache our package can't rebuild for you during
-a root-run install). Run `kbuildsycoca6 --noincremental` once and restart
-the app to fix it.
+place — Plasma caches desktop entries separately from GTK, in a per-user
+cache our package can't rebuild for you during a root-run install. Confirmed
+fix: restart Plasma Shell — `kquitapp6 plasmashell && kstart6 plasmashell`
+(older KDE: `kstart5`; your desktop will flicker/redraw, that's normal) —
+or just log out and back in. Rebuilding the desktop-file cache alone
+(`kbuildsycoca6 --noincremental`) plus restarting the app was *not*
+sufficient on its own in testing; Plasma Shell itself needed the restart.
 
 ## What it does
 
