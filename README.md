@@ -214,6 +214,14 @@ doesn't support streaming a reply back in print mode at all.
 
 ## Known limitations
 
+- Opening a chat only renders its most recent ~150 blocks by default — a
+  "Show N earlier messages" button loads the rest. A long-running chat
+  genuinely takes real, measured time to render in full (markdown parsing
+  + syntax highlighting + sanitization, done once per block): ~4.6s on a
+  real 1,491-block chat, synchronous and main-thread-blocking, easily
+  read as a hang or crash. Once a block finishes streaming its rendered
+  HTML is cached on it, so re-opening the same chat (or clicking "show
+  earlier") again in the same app session is fast the second time.
 - One CLI process per open chat, plus a small companion MCP-server process
   per chat for the permission relay (skipped only in Full access mode);
   very large numbers of simultaneously open chats will spawn that many

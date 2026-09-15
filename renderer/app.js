@@ -252,7 +252,18 @@ function renderBlockNode(block) {
       domIndex.set(block.id, node);
     }
     const content = node.querySelector('.block-text-content');
-    content.innerHTML = window.lingui.renderMarkdown(block.text || '');
+    // marked/hljs/DOMPurify aren't free — on a chat with hundreds of text
+    // blocks, re-parsing all of them on every open is where a multi-second
+    // freeze actually comes from (measured: ~4.6s on a 1,491-block chat).
+    // A finished block's text never changes again, so cache the one-time
+    // render and skip straight to the cached HTML from then on.
+    if (!block.streaming && block._renderedHtml !== undefined) {
+      content.innerHTML = block._renderedHtml;
+    } else {
+      const html = window.lingui.renderMarkdown(block.text || '');
+      content.innerHTML = html;
+      if (!block.streaming) block._renderedHtml = html;
+    }
     if (block.streaming) {
       const cursor = el('span', 'typing-cursor');
       content.appendChild(cursor);
@@ -505,13 +516,39 @@ function appendSupersededGroup(blocks) {
   messagesEl.appendChild(details);
 }
 
-/** Full rebuild of #messages from a chat's persisted/live block list. */
-function renderChatFull(chat) {
+// A chat that's grown to hundreds of blocks (this app has no built-in
+// trimming — a long-running project chat just keeps accumulating) takes
+// real, measured time to render in full: ~4.6s on a 1,491-block chat,
+// synchronous and main-thread-blocking, which reads as a hang or crash.
+// Opening one only renders the most recent slice; the rest is one click
+// away, not gone.
+const CHAT_RENDER_WINDOW = 150;
+
+/** Full (or windowed) rebuild of #messages from a chat's persisted/live block list. */
+function renderChatFull(chat, options) {
+  options = options || {};
   const messagesEl = document.getElementById('messages');
   messagesEl.innerHTML = '';
   domIndex.clear();
   currentAssistantStackEl = null;
-  let i = 0;
+
+  const total = chat.blocks.length;
+  const windowed = !options.full && total > CHAT_RENDER_WINDOW;
+  const startIndex = windowed ? total - CHAT_RENDER_WINDOW : 0;
+
+  if (windowed) {
+    const btn = el('button', 'show-history-btn', `Show ${startIndex} earlier message${startIndex === 1 ? '' : 's'}`);
+    btn.type = 'button';
+    btn.addEventListener('click', () => {
+      btn.textContent = 'Loading…';
+      btn.disabled = true;
+      // Let the "Loading…" state actually paint before the heavy synchronous work.
+      requestAnimationFrame(() => requestAnimationFrame(() => renderChatFull(chat, { full: true })));
+    });
+    messagesEl.appendChild(btn);
+  }
+
+  let i = startIndex;
   while (i < chat.blocks.length) {
     const block = chat.blocks[i];
     if (block.superseded) {

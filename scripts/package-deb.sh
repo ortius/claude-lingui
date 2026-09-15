@@ -31,14 +31,24 @@ rm -rf "$STAGE"
 mkdir -p "$STAGE/data/opt/claude-lingui" \
          "$STAGE/data/usr/bin" \
          "$STAGE/data/usr/share/applications" \
-         "$STAGE/data/usr/share/icons/hicolor/1024x1024/apps" \
          "$STAGE/control"
 
 # --- payload -----------------------------------------------------------
 cp -a "$APPDIR/." "$STAGE/data/opt/claude-lingui/"
 chmod 4755 "$STAGE/data/opt/claude-lingui/chrome-sandbox"
 ln -sf /opt/claude-lingui/claude-lingui "$STAGE/data/usr/bin/claude-lingui"
-cp "$PROJECT_ROOT/build/icon.png" "$STAGE/data/usr/share/icons/hicolor/1024x1024/apps/claude-lingui.png"
+
+# Only sizes actually listed in hicolor/index.theme's Directories= get
+# looked at by spec-compliant lookups (confirmed directly: KDE's icon
+# lookup silently ignores a claude-lingui.png dropped in an undeclared
+# 1024x1024/apps — the app_id/.desktop association can be perfect and the
+# icon still won't show). 512 is the largest declared raster size.
+command -v magick >/dev/null 2>&1 || { echo "ImageMagick ('magick') is required to build icon sizes." >&2; exit 1; }
+for size in 16 22 24 32 48 64 128 256 512; do
+  dir="$STAGE/data/usr/share/icons/hicolor/${size}x${size}/apps"
+  mkdir -p "$dir"
+  magick "$PROJECT_ROOT/build/icon.png" -resize "${size}x${size}" "$dir/claude-lingui.png"
+done
 
 cat > "$STAGE/data/usr/share/applications/claude-lingui.desktop" <<EOF
 [Desktop Entry]

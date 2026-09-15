@@ -28,6 +28,17 @@ BUILD_DIR="$PROJECT_ROOT/packaging/arch"
 mkdir -p "$BUILD_DIR"
 rm -rf "$BUILD_DIR/pkg" "$BUILD_DIR"/*.pkg.tar.zst
 
+# Only sizes actually listed in hicolor/index.theme's Directories= get
+# looked at by spec-compliant lookups (confirmed directly: KDE's icon
+# lookup silently ignores a claude-lingui.png dropped in an undeclared
+# 1024x1024/apps — the app_id/.desktop association can be perfect and the
+# icon still won't show). 512 is the largest declared raster size.
+command -v magick >/dev/null 2>&1 || { echo "ImageMagick ('magick') is required to build icon sizes." >&2; exit 1; }
+mkdir -p "$BUILD_DIR/icons"
+for size in 16 22 24 32 48 64 128 256 512; do
+  magick "$PROJECT_ROOT/build/icon.png" -resize "${size}x${size}" "$BUILD_DIR/icons/claude-lingui-${size}.png"
+done
+
 cat > "$BUILD_DIR/claude-lingui.desktop" <<EOF
 [Desktop Entry]
 Name=Claude LinGUI
@@ -61,7 +72,13 @@ package() {
   ln -sf /opt/claude-lingui/claude-lingui "\$pkgdir/usr/bin/claude-lingui"
 
   install -Dm644 "$BUILD_DIR/claude-lingui.desktop" "\$pkgdir/usr/share/applications/claude-lingui.desktop"
-  install -Dm644 "$PROJECT_ROOT/build/icon.png" "\$pkgdir/usr/share/icons/hicolor/1024x1024/apps/claude-lingui.png"
+EOF
+for size in 16 22 24 32 48 64 128 256 512; do
+  cat >> "$BUILD_DIR/PKGBUILD" <<EOF
+  install -Dm644 "$BUILD_DIR/icons/claude-lingui-${size}.png" "\$pkgdir/usr/share/icons/hicolor/${size}x${size}/apps/claude-lingui.png"
+EOF
+done
+cat >> "$BUILD_DIR/PKGBUILD" <<EOF
 }
 EOF
 
