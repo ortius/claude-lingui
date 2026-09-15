@@ -21,6 +21,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      # package-*.sh generate the app's icon at every hicolor size from the
+      # single 1024px source — ubuntu-latest doesn't ship ImageMagick.
+      - run: sudo apt-get update && sudo apt-get install -y imagemagick
       - run: npm ci
       - run: npm run pack:linux
       - run: npm run package:deb
@@ -37,8 +40,10 @@ jobs:
     steps:
       # actions/checkout needs git; makepkg refuses to run as root, so the
       # rest of the job runs as an unprivileged "builder" user it creates.
+      # imagemagick: package-pacman.sh generates the app's icon at every
+      # hicolor size from the single 1024px source.
       - name: Install build dependencies
-        run: pacman -Sy --noconfirm --needed nodejs npm git
+        run: pacman -Sy --noconfirm --needed nodejs npm git imagemagick
 
       - uses: actions/checkout@v4
 
