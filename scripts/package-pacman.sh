@@ -33,10 +33,19 @@ rm -rf "$BUILD_DIR/pkg" "$BUILD_DIR"/*.pkg.tar.zst
 # lookup silently ignores a claude-lingui.png dropped in an undeclared
 # 1024x1024/apps — the app_id/.desktop association can be perfect and the
 # icon still won't show). 512 is the largest declared raster size.
-command -v magick >/dev/null 2>&1 || { echo "ImageMagick ('magick') is required to build icon sizes." >&2; exit 1; }
+# IM7+ provides a unified `magick` binary; older ImageMagick only has
+# `convert` — both take the same `-resize WxH` invocation, so fall back to it.
+if command -v magick >/dev/null 2>&1; then
+  IM_CMD="magick"
+elif command -v convert >/dev/null 2>&1; then
+  IM_CMD="convert"
+else
+  echo "ImageMagick ('magick' or 'convert') is required to build icon sizes." >&2
+  exit 1
+fi
 mkdir -p "$BUILD_DIR/icons"
 for size in 16 22 24 32 48 64 128 256 512; do
-  magick "$PROJECT_ROOT/build/icon.png" -resize "${size}x${size}" "$BUILD_DIR/icons/claude-lingui-${size}.png"
+  "$IM_CMD" "$PROJECT_ROOT/build/icon.png" -resize "${size}x${size}" "$BUILD_DIR/icons/claude-lingui-${size}.png"
 done
 
 cat > "$BUILD_DIR/claude-lingui.desktop" <<EOF
